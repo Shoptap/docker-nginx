@@ -1,7 +1,9 @@
-FROM nginx:1.9
+FROM jwilder/nginx-proxy
 
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY nginx.tmpl /app/ 
+COPY Procfile /app/
 
 RUN rm /usr/share/nginx/html/index.html 
+RUN rm -r /etc/nginx/conf.d
 
-CMD ["nginx"]
+VOLUME /usr/share/nginx/html/
