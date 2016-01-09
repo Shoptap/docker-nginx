@@ -1,12 +1,18 @@
 {{ define "upstream" }}
     {{ if .Address }}
-        {{/* If we got the containers from swarm and this container's port is published to host, use host IP:PORT */}}
+        {{/* If we got the containers from swarm and this container's port is published to host, use host IP:PORT */}} 
+        {{ $netLen := len .Container.Networks }}
         {{ if and .Container.Node.ID .Address.HostPort }}
             # {{ .Container.Node.Name }}/{{ .Container.Name }}
             server {{ .Container.Node.Address.IP }}:{{ .Address.HostPort }} fail_timeout=0;
+        {{/* If there is no swarm node or the port is not published on host, check for Swarm network */}}        
+        {{ else if eq $netLen 1}}
+            # {{ .Container.Node.Name }}/{{ .Container.Name }} (Swarm Network)
+			{{ $network := index .Container.Networks 0 }}   
+            server {{ $network.IP }}:3000 fail_timeout=0;
         {{/* If there is no swarm node or the port is not published on host, use container's IP:PORT */}}
         {{ else }}
-            # {{ .Container.Name }}
+            # {{ .Container.Name }} (Direct)
             server {{ .Address.IP }}:{{ .Address.Port }} fail_timeout=0;
         {{ end }}
     {{ else }}
@@ -60,8 +66,7 @@ http {
 	  # to return a good HTTP response (in case the unicorn master nukes a
 	  # single worker for timing out).
 
-      # Really want to use  whereLabelValueMatches $ "com.thehunt.role" "^app_server$" but it is not in a published build yet
-    {{ range $container := where $ "Env.THEHUNT_ROLE" "app_server" }}
+    {{ range $container := whereLabelValueMatches $ "com.thehunt.role" "^app_server$" }}
         {{ $addrLen := len $container.Addresses }}
         {{/* If only 1 port exposed, use that */}}
         {{ if eq $addrLen 1 }}
@@ -74,6 +79,9 @@ http {
             {{ template "upstream" (dict "Container" $container "Address" $address) }}
         {{ end }}
     {{ end }}
+                    
+          # A placeholder to not crash NGINX if there are no valid servers
+          server 1.2.3.4:3000 down;  
 	}
 
 	server {
@@ -120,6 +128,9 @@ http {
 	    # can be set properly within the Rack application
 	    proxy_set_header Host $http_host;
 
+        # Queue length monitoring                                                                                                                                                                                                                                       
+        proxy_set_header X-Request-Start "t=${msec}";
+
 	    # we don't want nginx trying to do something clever with
 	    # redirects, we set the Host: header above already.
 	    proxy_redirect off;
@@ -139,3 +150,4 @@ http {
 	  }
 	}
 }
+
