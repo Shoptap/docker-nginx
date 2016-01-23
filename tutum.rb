@@ -123,7 +123,7 @@ class Service
   def include?(mode, mode_options = {})
     @mode, @mode_options = mode, mode_options
     reload!
-    if rightStack? && notSelf? && running
+    if rightStack? && notSelf? && running?
       reload!
       containers? && http? 
     else
