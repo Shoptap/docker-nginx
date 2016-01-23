@@ -1,1 +1,1 @@
-docker build -t thehunt_nginx:1 .
+docker build -t thehunt_nginx:tutum .

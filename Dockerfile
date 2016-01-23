@@ -1,14 +1,15 @@
-#Can't include from jwilder as we need docker-gen 0.5
-#FROM jwilder/nginx-proxy
-
-FROM nginx:1.9.6
-MAINTAINER Jason Wilder mail@jasonwilder.com
+FROM nginx:1.9.9
+MAINTAINER Richard Adams richard@madwire.co.uk
 
 # Install wget and install/updates certificates
 RUN apt-get update \
  && apt-get install -y -q --no-install-recommends \
     ca-certificates \
     wget \
+    build-essential \
+    openssl \
+    libssl-dev \
+    ruby-full \
  && apt-get clean \
  && rm -r /var/lib/apt/lists/*
 
@@ -20,26 +21,19 @@ RUN echo "daemon off;" >> /etc/nginx/nginx.conf \
 RUN wget -P /usr/local/bin https://godist.herokuapp.com/projects/ddollar/forego/releases/current/linux-amd64/forego \
  && chmod u+x /usr/local/bin/forego
 
-ENV DOCKER_GEN_VERSION 0.5.0
+# Install App dependancies
+RUN gem install faye-websocket --no-ri --no-rdoc && gem install tutum --no-ri --no-rdoc
 
-RUN wget https://github.com/jwilder/docker-gen/releases/download/$DOCKER_GEN_VERSION/docker-gen-linux-amd64-$DOCKER_GEN_VERSION.tar.gz \
- && tar -C /usr/local/bin -xvzf docker-gen-linux-amd64-$DOCKER_GEN_VERSION.tar.gz \
- && rm /docker-gen-linux-amd64-$DOCKER_GEN_VERSION.tar.gz
-
-COPY docker-entrypoint.sh /app/
-WORKDIR /app/
-
-ENV DOCKER_HOST unix:///tmp/docker.sock
-
-COPY nginx.tmpl /app/ 
-COPY Procfile /app/
+ENV NGINX_DEFAULT_CONF=/etc/nginx/nginx.conf
 
 COPY nginx.conf /etc/nginx/nginx.conf
+
+COPY Procfile /app/
+COPY tutum.rb /app/ 
+COPY nginx.conf.erb /app/
+WORKDIR /app/
 
 RUN rm /usr/share/nginx/html/index.html 
 RUN rm -r /etc/nginx/conf.d
 
-VOLUME /usr/share/nginx/html/
-
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["forego", "start", "-r"]

@@ -1,2 +1,2 @@
 nginx: nginx
-dockergen: docker-gen -watch -only-exposed -notify "nginx -s reload" /app/nginx.tmpl /etc/nginx/nginx.conf
+tutum: ruby tutum.rb
