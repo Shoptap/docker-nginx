@@ -46,10 +46,9 @@ http {
       <% @services.each do |service| %>
 	  # Service <%= service.name %>
 	  <% service.containers.each do |container| %>
-	  server <%= container.ip%>:<%= service.port_inner.first %>;
+	  server <%= container.ip%>:<%= service.port_inner.first %> fail_timeout=0;
 	  <% end %>
-	
-	` <% end %>
+	  <% end %>
 	  # A placeholder to not crash NGINX if there are no valid servers
 	  server 1.2.3.4:3000 down;  
 	}

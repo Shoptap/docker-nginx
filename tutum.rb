@@ -109,11 +109,11 @@ class Service
   end
 
   def port_types
-    @port_types ||= attributes['container_ports'].map {|p| p['port_name']}
+    @port_types ||= containers.first.attributes['container_ports'].map {|p| p['port_name']} rescue nil
   end
   
   def port_inner
-    @port_inner ||= attributes['container_ports'].map {|p| p['inner_port'].to_i}
+    @port_inner ||= containers.first.attributes['container_ports'].map {|p| p['inner_port'].to_i} rescue nil
   end
 
   def container_ips
@@ -123,11 +123,16 @@ class Service
   def include?(mode, mode_options = {})
     @mode, @mode_options = mode, mode_options
     reload!
-    http? && running? && containers? && rightStack?
+    if rightStack? && notSelf? && running
+      reload!
+      containers? && http? 
+    else
+      false
+    end
   end
 
   def http?
-    (port_types & ['http', 'https']).count > 0 || (port_inner & [3000]).count > 0
+    (port_types && (port_types & ['http', 'https']).count > 0) || (port_inner && (port_inner & [3000]).count > 0)
   end
 
   def host
@@ -145,7 +150,11 @@ class Service
   end
 
   def rightStack?
-    @mode_options['my_stack'] == attributes['stack']
+    @mode_options[:my_stack] == attributes['stack']
+  end
+  
+  def notSelf?
+    @mode_options[:my_uuid] != attributes['uuid']
   end
 
   def containers?
@@ -213,17 +222,21 @@ class HttpServices
 
   private
 
-  def this_service
-    @session.services.list({})['objects'].detect{|w| w['public_dns'] == @this_service_id}
+  def this_service    
+    @_this_service ||= begin
+      sess = @session.services.list({})['objects'].detect{|w| w['public_dns'] == @this_service_id}
+      session.services.get(sess['uuid'])
+    end
   end
   
   def get_services
-    my_stack = this_service['stack']
-    links = this_service['linked_to_service'].map { |x| x['to_service'] } if this_service['linked_to_service']
+    me = this_service
+    my_stack = me['stack']
+    links = me['linked_to_service'].map { |x| x['to_service'] } if me['linked_to_service']
     
     services = []
     services_list.each do |service|
-      if service.include? mode, node: node, region_map: region_map, my_stack: my_stack, links: links,
+      if service.include? mode, node: node, region_map: region_map, my_stack: my_stack, links: links, my_uuid: this_service['uuid']
         services << service
       end
     end
@@ -276,7 +289,7 @@ EM.run {
   def init_nginx_config
     LOGGER.info 'Init Nginx config'
     LOGGER.info 'Restriction mode: ' + RESTRICT_MODE.to_s
-    HttpServices.new(ENV['TUTUM_AUTH'], RESTRICT_MODE, THIS_NODE).write_conf(ENV['NGINX_DEFAULT_CONF'])
+    HttpServices.new(ENV['TUTUM_AUTH'], RESTRICT_MODE, THIS_NODE, THIS_SERVICE).write_conf(ENV['NGINX_DEFAULT_CONF'])
     HttpServices.reload!
   end
 
@@ -310,8 +323,10 @@ EM.run {
     ws.on :message do |event|
       data = JSON.parse(event.data)
 
+      trigger = false
       if data['type'] == 'service'
-        
+        trigger = true
+
         case data['state']
         when 'Scaling', 'Redeploying', 'Stopping', 'Starting', 'Terminating'
           LOGGER.info "Service: #{data['uuid']} is #{data['state']}..."
@@ -324,23 +339,23 @@ EM.run {
             @timer.cancel # cancel any conf writes
             @services_changed = true
           end
-        when 'Success'
-          if data['parents'] && data['parents'].includes?(TUTUM_SERVICE_API_URI)
-            LOGGER.info "Attribute change on this service. Most likely link change."
-            @services_changing.shift
-            @timer.cancel # cancel any conf writes
-            @services_changed = true            
-          end
         end
-        
+      end
 
-        if @services_changed && @services_changing == []
-          LOGGER.info "Services changed - Rewrite Nginx config"
-          @services_changed = false
-          @timer.cancel
-          @timer = EventMachine::Timer.new(5) do
-            HttpServices.new(ENV['TUTUM_AUTH'], RESTRICT_MODE, THIS_NODE, THIS_SERVICE).write_conf(ENV['NGINX_DEFAULT_CONF'])
-          end
+      if data['state'] == 'Success' && data['parents'] && data['parents'].include?(THIS_SERVICE_URI)
+        LOGGER.info "Attribute change on this service. Most likely link change."
+        @services_changing.shift
+        @timer.cancel # cancel any conf writes
+        @services_changed = true
+        trigger = true
+      end
+
+      if trigger && @services_changed && @services_changing == []
+        LOGGER.info "Services changed - Rewrite Nginx config"
+        @services_changed = false
+        @timer.cancel
+        @timer = EventMachine::Timer.new(5) do
+          HttpServices.new(ENV['TUTUM_AUTH'], RESTRICT_MODE, THIS_NODE, THIS_SERVICE).write_conf(ENV['NGINX_DEFAULT_CONF'])
         end
 
       end
