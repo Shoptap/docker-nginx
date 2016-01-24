@@ -14,7 +14,6 @@ end
 RESTRICT_MODE = (ENV['RESTRICT_MODE'] || :none).to_sym
 # Retrieve the node's fqdn.
 THIS_NODE = ENV['TUTUM_NODE_FQDN']
-THIS_SERVICE = ENV['TUTUM_SERVICE_FQDN']
 THIS_SERVICE_URI = ENV['TUTUM_SERVICE_API_URI']
 
 $stdout.sync = true
@@ -224,7 +223,8 @@ class HttpServices
 
   def this_service    
     @_this_service ||= begin
-      sess = @session.services.list({})['objects'].detect{|w| w['public_dns'] == @this_service_id}
+      Logger.info 'My URI: ' + @this_service_id
+      sess = @session.services.list({})['objects'].detect{|w| w['resource_uri'] == @this_service_id}
       session.services.get(sess['uuid'])
     end
   end
@@ -289,7 +289,7 @@ EM.run {
   def init_nginx_config
     LOGGER.info 'Init Nginx config'
     LOGGER.info 'Restriction mode: ' + RESTRICT_MODE.to_s
-    HttpServices.new(ENV['TUTUM_AUTH'], RESTRICT_MODE, THIS_NODE, THIS_SERVICE).write_conf(ENV['NGINX_DEFAULT_CONF'])
+    HttpServices.new(ENV['TUTUM_AUTH'], RESTRICT_MODE, THIS_NODE, THIS_SERVICE_URI).write_conf(ENV['NGINX_DEFAULT_CONF'])
     HttpServices.reload!
   end
 
@@ -355,7 +355,7 @@ EM.run {
         @services_changed = false
         @timer.cancel
         @timer = EventMachine::Timer.new(5) do
-          HttpServices.new(ENV['TUTUM_AUTH'], RESTRICT_MODE, THIS_NODE, THIS_SERVICE).write_conf(ENV['NGINX_DEFAULT_CONF'])
+          HttpServices.new(ENV['TUTUM_AUTH'], RESTRICT_MODE, THIS_NODE, THIS_SERVICE_URI).write_conf(ENV['NGINX_DEFAULT_CONF'])
         end
 
       end
