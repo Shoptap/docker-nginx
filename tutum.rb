@@ -15,6 +15,7 @@ RESTRICT_MODE = (ENV['RESTRICT_MODE'] || :none).to_sym
 # Retrieve the node's fqdn.
 THIS_NODE = ENV['TUTUM_NODE_FQDN']
 THIS_SERVICE_URI = ENV['TUTUM_SERVICE_API_URI']
+THIS_STACK = ENV['TUTUM_STACK_NAME']
 
 $stdout.sync = true
 CLIENT_URL = URI.escape("wss://stream.tutum.co/v1/events?auth=#{ENV['TUTUM_AUTH']}")
@@ -220,12 +221,20 @@ class HttpServices
   end
 
   private
+  
+  def uuid_from_api(uri)
+    uri.split('/').last
+  end
+  
+  def session_services_objects
+    @_session_services_objects ||= @session.services.list({:stack => this_service['stack']})['objects']
+  end
 
-  def this_service    
+  def this_service
     @_this_service ||= begin
-      LOGGER.info('My URI: ' + @this_service_id)
-      sess = @session.services.list({})['objects'].detect{|w| w['resource_uri'] == @this_service_id}
-      session.services.get(sess['uuid'])
+      my_uuid = uuid_from_api(@this_service_id)
+      LOGGER.info('My UUID: ' + my_uuid)
+      session.services.get(my_uuid)
     end
   end
   
@@ -244,7 +253,7 @@ class HttpServices
   end
 
   def services_list(filters = {})
-    session.services.list(filters)['objects'].map {|data| Service.new(data, session) }
+    session_services_objects.map {|data| Service.new(data, session) }
   end
 
   def get_nodes(filters = {})
