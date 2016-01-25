@@ -223,7 +223,7 @@ class HttpServices
 
   def this_service    
     @_this_service ||= begin
-      Logger.info 'My URI: ' + @this_service_id
+      LOGGER.info('My URI: ' + @this_service_id)
       sess = @session.services.list({})['objects'].detect{|w| w['resource_uri'] == @this_service_id}
       session.services.get(sess['uuid'])
     end
