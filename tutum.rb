@@ -40,7 +40,6 @@ end
 
 
 class NginxConf
-
   TEMPLATE = File.open("./nginx.conf.erb", "r").read
 
   def initialize()
@@ -122,9 +121,10 @@ class Service
 
   def include?(mode, mode_options = {})
     @mode, @mode_options = mode, mode_options
-    reload!
+
     if rightStack? && notSelf? && running?
-      reload!
+      # No need to reload if mode is link since the original service was populated from a direct pull
+      reload! unless mode == :link || mode == :node_link
       containers? && http? 
     else
       false
@@ -244,7 +244,7 @@ class HttpServices
     links = me['linked_to_service'].map { |x| x['to_service'] } if me['linked_to_service']
     
     services = []
-    services_list.each do |service|
+    services_list(mode, links).each do |service|
       if service.include? mode, node: node, region_map: region_map, my_stack: my_stack, links: links, my_uuid: this_service['uuid']
         services << service
       end
@@ -252,8 +252,13 @@ class HttpServices
     services
   end
 
-  def services_list(filters = {})
-    session_services_objects.map {|data| Service.new(data, session) }
+  def services_list(mode, links)
+    if mode == :link || mode == :node_link
+      LOGGER.info('Link mode, loading only linked services')
+      links.map { |x| Service.new(session.services.get(uuid_from_api(x)), session) }
+    else
+      session_services_objects.map {|data| Service.new(data, session) }
+    end
   end
 
   def get_nodes(filters = {})
