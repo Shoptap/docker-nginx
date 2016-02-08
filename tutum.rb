@@ -116,7 +116,7 @@ class Service
   end
 
   def container_ips
-    @container_ips ||= containers.map {|c| c.ip if running? }.sort
+    @container_ips ||= containers.reject{|x| !x.running?}.map(&:ip).sort
   end
 
   def include?(mode, mode_options = {})
