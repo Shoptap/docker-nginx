@@ -1,2 +1,2 @@
 nginx: nginx
-tutum: ruby tutum.rb
+tutum: ruby tutum.rb 2>> tutum-runlog >> tutum-runlog 

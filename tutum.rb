@@ -340,10 +340,6 @@ EM.run {
       data = JSON.parse(event.data)
 
       trigger = false
-      if data['type'] == 'container'
-        trigger = true
-        LOGGER.info "Container data: #{data}"
-      end
       if data['type'] == 'service' || data['type'] == 'container'
         trigger = true
 
