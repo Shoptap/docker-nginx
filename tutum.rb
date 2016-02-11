@@ -40,6 +40,8 @@ end
 
 
 class NginxConf
+  attr_reader :services
+  
   TEMPLATE = File.open("./nginx.conf.erb", "r").read
 
   def initialize()
@@ -116,7 +118,7 @@ class Service
   end
 
   def container_ips
-    @container_ips ||= containers.reject{|x| !x.running?}.map(&:ip).sort
+    @container_ips ||= containers.map(&:ip).sort
   end
 
   def include?(mode, mode_options = {})
@@ -167,7 +169,7 @@ class Service
       attributes['containers'].map do |container_url|
         id = container_url.split("/").last
         container = Container.new(session.containers.get(id))
-        if include_container? container
+        if (include_container? container) && container.running?
           container
         else
           nil
@@ -217,12 +219,12 @@ class HttpServices
     @nginx_conf ||= NginxConf.new()
     @nginx_conf.write(@services, file_path)
     LOGGER.info 'Writing new nginx config'
-    self
+    @nginx_conf.services
   end
 
   private
   
-  def uuid_from_api(uri)
+  def self.uuid_from_api(uri)
     uri.split('/').last
   end
   
@@ -232,7 +234,7 @@ class HttpServices
 
   def this_service
     @_this_service ||= begin
-      my_uuid = uuid_from_api(@this_service_id)
+      my_uuid = self.class.uuid_from_api(@this_service_id)
       LOGGER.info('My UUID: ' + my_uuid)
       session.services.get(my_uuid)
     end
@@ -242,7 +244,6 @@ class HttpServices
     me = this_service
     my_stack = me['stack']
     links = me['linked_to_service'].map { |x| x['to_service'] } if me['linked_to_service']
-    
     services = []
     services_list(mode, links).each do |service|
       if service.include? mode, node: node, region_map: region_map, my_stack: my_stack, links: links, my_uuid: this_service['uuid']
@@ -255,7 +256,7 @@ class HttpServices
   def services_list(mode, links)
     if mode == :link || mode == :node_link
       LOGGER.info('Link mode, loading only linked services')
-      links.map { |x| Service.new(session.services.get(uuid_from_api(x)), session) }
+      links.map { |x| Service.new(session.services.get(self.class.uuid_from_api(x)), session) }
     else
       session_services_objects.map {|data| Service.new(data, session) }
     end
@@ -299,11 +300,12 @@ EM.run {
   @services_changed = false
   @shutting_down = false
   @timer = EventMachine::Timer.new(0)
+  @my_services = []
 
   def init_nginx_config
     LOGGER.info 'Init Nginx config'
     LOGGER.info 'Restriction mode: ' + RESTRICT_MODE.to_s
-    HttpServices.new(ENV['TUTUM_AUTH'], RESTRICT_MODE, THIS_NODE, THIS_SERVICE_URI).write_conf(ENV['NGINX_DEFAULT_CONF'])
+    @my_services = HttpServices.new(ENV['TUTUM_AUTH'], RESTRICT_MODE, THIS_NODE, THIS_SERVICE_URI).write_conf(ENV['NGINX_DEFAULT_CONF'])
     HttpServices.reload!
   end
 
@@ -338,17 +340,30 @@ EM.run {
       data = JSON.parse(event.data)
 
       trigger = false
-      if data['type'] == 'service'
+      if data['type'] == 'container'
+        trigger = true
+        LOGGER.info "Container data: #{data}"
+      end
+      if data['type'] == 'service' || data['type'] == 'container'
         trigger = true
 
         case data['state']
         when 'Scaling', 'Redeploying', 'Stopping', 'Starting', 'Terminating'
-          LOGGER.info "Service: #{data['uuid']} is #{data['state']}..."
+          if data['type'] == 'container'
+            relevant_parents = data['parents'].map {|x| HttpServices.uuid_from_api(x)} & @my_services.map(&:id)
+          #  unless relevant_parents.empty?
+            @services_changing << relevant_parents    
+           # end
+            LOGGER.info "#{data['type']}: #{data['uuid']} is #{data['state']}. Relevant: #{!relevant_parents.empty?}"
+          else
+            @services_changing << data['uuid']
+          end
+          
           @timer.cancel # cancel any conf writes
-          @services_changing << data['uuid']
+          
         when 'Running', 'Stopped', 'Not running', 'Terminated'
           if @services_changing.count > 0
-            LOGGER.info "Service: #{data['uuid']} is #{data['state']}!"
+            LOGGER.info "#{data['type']}: #{data['uuid']} is #{data['state']}!"
             @services_changing.shift
             @timer.cancel # cancel any conf writes
             @services_changed = true
@@ -369,7 +384,7 @@ EM.run {
         @services_changed = false
         @timer.cancel
         @timer = EventMachine::Timer.new(5) do
-          HttpServices.new(ENV['TUTUM_AUTH'], RESTRICT_MODE, THIS_NODE, THIS_SERVICE_URI).write_conf(ENV['NGINX_DEFAULT_CONF'])
+          @my_services = HttpServices.new(ENV['TUTUM_AUTH'], RESTRICT_MODE, THIS_NODE, THIS_SERVICE_URI).write_conf(ENV['NGINX_DEFAULT_CONF'])
         end
 
       end
