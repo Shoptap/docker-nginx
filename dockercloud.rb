@@ -360,7 +360,7 @@ EM.run {
 
       if data['state'] == 'Success' && data['parents'] && data['parents'].include?(THIS_SERVICE_URI)
         LOGGER.info "Attribute change on this service. Most likely link change."
-        @services_changing.shift
+        @services_changing = []
         @timer.cancel # cancel any conf writes
         @services_changed = true
         trigger = true
