@@ -29,7 +29,7 @@ ENV NGINX_DEFAULT_CONF=/etc/nginx/nginx.conf
 COPY nginx.conf /etc/nginx/nginx.conf
 
 COPY Procfile /app/
-COPY tutum.rb /app/ 
+COPY dockercloud.rb /app/ 
 COPY nginx.conf.erb /app/
 WORKDIR /app/
 
