@@ -314,8 +314,8 @@ EM.run {
 
   def connection
     LOGGER.info "Connecting to #{CLIENT_URL}"
-    ws = Faye::WebSocket::Client.new(CLIENT_URL, nil, ping: 240)
-
+    ws = Faye::WebSocket::Client.new(CLIENT_URL, nil, ping: 240, headers: { 'Authorization' => ENV['DOCKERCLOUD_AUTH']})
+    
     ws.on :open do |event|
       LOGGER.info "Connected!"
       if @services_changing.count > 0
