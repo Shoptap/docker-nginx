@@ -1,2 +1,2 @@
 nginx: nginx
-tutum: ruby tutum.rb 2>> tutum-runlog >> tutum-runlog 
+tutum: ruby dockercloud.rb 2>> tutum-runlog >> tutum-runlog 
