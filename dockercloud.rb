@@ -329,11 +329,12 @@ EM.run {
 
     ws.on :message do |event|
       data = JSON.parse(event.data)
-
       trigger = false
       if data['type'] == 'service' || data['type'] == 'container'
         trigger = true
 
+        print "State is: #{data['state']}"
+        
         case data['state']
         when 'Scaling', 'Redeploying', 'Stopping', 'Starting', 'Terminating'
           if data['type'] == 'container'
