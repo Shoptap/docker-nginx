@@ -66,7 +66,7 @@ http {
 	  # to return a good HTTP response (in case the unicorn master nukes a
 	  # single worker for timing out).
 
-    {{ range $container := whereLabelValueMatches $ "com.thehunt.role" "^app_server$" }}
+    {{ range $container := and (whereLabelValueMatches $ "com.thehunt.role" "^app_server$") (whereLabelValueMatches $ "com.thehunt.partition" .Env.PARTITION) }}
         {{ $addrLen := len $container.Addresses }}
         {{/* If only 1 port exposed, use that */}}
         {{ if eq $addrLen 1 }}
