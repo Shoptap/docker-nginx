@@ -341,23 +341,23 @@ EM.run {
 
       trigger = false
       if data['type'] == 'service' || data['type'] == 'container'
-        trigger = true
-
         case data['state']
         when 'Scaling', 'Redeploying', 'Stopping', 'Starting', 'Terminating'
           if data['type'] == 'container'
             relevant_parents = data['parents'].map {|x| HttpServices.uuid_from_api(x)} & @my_services.map(&:id)
-          #  unless relevant_parents.empty?
+            trigger = true unless relevant_parents.empty?
             @services_changing + relevant_parents    
-           # end
             LOGGER.info "#{data['type']}: #{data['uuid']} is #{data['state']}. Relevant: #{!relevant_parents.empty?}"
           else
+            trigger = true
             @services_changing << data['uuid']
           end
           
           @timer.cancel # cancel any conf writes
           
         when 'Running', 'Stopped', 'Not running', 'Terminated'
+          trigger = true
+          
           if @services_changing.count > 0
             LOGGER.info "#{data['type']}: #{data['uuid']} is #{data['state']}!"
             @services_changing.shift
