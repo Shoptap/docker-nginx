@@ -330,6 +330,8 @@ EM.run {
     ws.on :message do |event|
       data = JSON.parse(event.data)
       
+      LOGGER.info "Data: #{data} This: #{THIS_SERVICE_URI} Parents: #{data['parents']} Includes: #{data['parents'].include?(THIS_SERVICE_URI)}"
+      
       trigger = false
       if data['type'] == 'service' || data['type'] == 'container'
         case data['state']
@@ -337,7 +339,7 @@ EM.run {
           if data['type'] == 'container'
             relevant_parents = data['parents'].map {|x| HttpServices.uuid_from_api(x)} & @my_services.map(&:id)
             trigger = true unless relevant_parents.empty?
-            @services_changing + relevant_parents
+            @services_changing += relevant_parents
             LOGGER.info "#{data['type']}: #{data['uuid']} is #{data['state']}. Relevant: #{!relevant_parents.empty?}"
           else
             trigger = true
@@ -349,6 +351,7 @@ EM.run {
         when 'Running', 'Stopped', 'Not running', 'Terminated'
           trigger = true
           
+          # LOGGER.info "Services changing: #{@services_changing}"
           if @services_changing.count > 0
             LOGGER.info "#{data['type']}: #{data['uuid']} is #{data['state']}!"
             @services_changing.shift
@@ -358,7 +361,7 @@ EM.run {
         end
       end
 
-      if data['state'] == 'Success' && data['parents'] && data['parents'].include?(THIS_SERVICE_URI)
+      if data['state'] == 'Success' && data['parents'] && data['parents'].map(&HttpServices.method(:uuid_from_api)).include?(HttpServices.uuid_from_api(THIS_SERVICE_URI))
         LOGGER.info "Attribute change on this service. Most likely link change."
         @services_changing = []
         @timer.cancel # cancel any conf writes
